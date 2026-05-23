@@ -7,9 +7,6 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Charades - Watin Be This?</title>
-<link rel="manifest" href="manifest.json"/>
-<link rel="apple-touch-icon" href="icon-192.png"/>
-<meta name="theme-color" content="#080b14"/>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800;900&family=DM+Mono:wght@400;500&display=swap');
 
@@ -435,6 +432,17 @@ html,body{
 }
 .history-winner{color:var(--accent3);font-size:11px;font-family:'DM Mono',monospace;}
 
+/* ---- HOW TO PLAY ---- */
+.htp-card{
+  display:flex;gap:16px;align-items:flex-start;
+  background:var(--card);border:1.5px solid var(--border);
+  border-radius:14px;padding:16px;
+}
+.htp-icon{font-size:28px;flex-shrink:0;}
+.htp-card h4{font-size:15px;margin-bottom:4px;}
+.htp-card p{font-size:13px;color:var(--muted);line-height:1.5;}
+.htp-card strong{color:var(--accent);}
+
 /* ---- TIMER FLASH ---- */
 @keyframes timerPulse{0%,100%{color:var(--accent);}50%{color:var(--accent2);}}
 .timer-urgent{animation:timerPulse .5s infinite;}
@@ -504,6 +512,44 @@ html,body{
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- HOW TO PLAY SCREEN -->
+<div class="screen hidden" id="howToPlayScreen">
+  <div class="screen-header">
+    <div class="back-btn" onclick="showScreen('homeScreen')">←</div>
+    <h2>How to Play</h2>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px;padding-bottom:40px;">
+    <div class="htp-card">
+      <div class="htp-icon">📱</div>
+      <div><h4>Landscape Mode</h4><p>When the game starts it rotates to landscape. Hold the phone up so the crowd can see the word.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">✅</div>
+      <div><h4>Got It</h4><p>Your team guessed it? Tap the <strong>right side</strong> of the screen. In landscape that becomes the top.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">⏭️</div>
+      <div><h4>Skip</h4><p>Too hard? Tap the <strong>left side</strong>. In landscape that becomes the bottom. Skipped words don't count.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">👤</div>
+      <div><h4>Solo Mode</h4><p>One player holds the phone, everyone else gives clues. Race against words or the clock.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">⚔️</div>
+      <div><h4>Versus Mode</h4><p>2 to 10 players take turns. Each holds the phone for their turn. Highest score wins. Saved to leaderboard.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">⏱️</div>
+      <div><h4>Timer Mode</h4><p>Race against the clock instead of fixed word count. Set from 30 seconds to 3 minutes.</p></div>
+    </div>
+    <div class="htp-card">
+      <div class="htp-icon">🔄</div>
+      <div><h4>Rounds</h4><p>In Versus mode choose how many rounds. Most points across all rounds wins.</p></div>
+    </div>
   </div>
 </div>
 
@@ -808,6 +854,7 @@ function init(){
   renderCatGrid();
   renderManageCats();
   checkMotionPermission();
+  setupBackButton();
 }
 
 function loadCustomWords(){
@@ -954,6 +1001,8 @@ function startGame(){
     return;
   }
 
+  lockLandscape();
+
   // Build pool
   let pool = [];
   for(const key of selectedCats){
@@ -1039,6 +1088,7 @@ function flashWord(type){
 
 function endGame(){
   stopTimer();
+  unlockOrientation();
   const game = currentGame;
 
   // Save score to current player
@@ -1319,9 +1369,11 @@ function startSolo(){
 function lockLandscape(){
   try{
     if(screen.orientation && screen.orientation.lock){
-      screen.orientation.lock('landscape').catch(()=>{});
+      screen.orientation.lock('landscape').catch(()=>{ forceLandscapeCSS(true); });
+    } else {
+      forceLandscapeCSS(true);
     }
-  } catch(e){}
+  } catch(e){ forceLandscapeCSS(true); }
 }
 
 function unlockOrientation(){
@@ -1330,6 +1382,53 @@ function unlockOrientation(){
       screen.orientation.unlock();
     }
   } catch(e){}
+  forceLandscapeCSS(false);
+}
+
+function forceLandscapeCSS(on){
+  const gs = document.getElementById('gameScreen');
+  if(on && window.innerHeight > window.innerWidth){
+    const w = window.innerWidth, h = window.innerHeight;
+    gs.style.cssText = `
+      transform: rotate(90deg);
+      transform-origin: center center;
+      width: ${h}px;
+      height: ${w}px;
+      position: fixed;
+      top: ${(h - w) / 2}px;
+      left: -${(h - w) / 2}px;
+      overflow: hidden;
+    `;
+  } else if(!on){
+    gs.style.cssText = '';
+  }
+}
+
+// ===================== ANDROID BACK BUTTON =====================
+function setupBackButton(){
+  history.pushState({screen:'homeScreen'}, '');
+  window.addEventListener('popstate', function(){
+    const current = document.querySelector('.screen:not(.hidden)');
+    const currentId = current ? current.id : 'homeScreen';
+    const backMap = {
+      'modeSelectScreen':'homeScreen',
+      'howToPlayScreen':'homeScreen',
+      'historyScreen':'homeScreen',
+      'manageScreen':'homeScreen',
+      'playersScreen':'modeSelectScreen',
+      'categoryScreen': currentPlayMode === 'solo' ? 'modeSelectScreen' : 'playersScreen',
+      'gameModeScreen':'categoryScreen',
+      'turnScreen':'gameModeScreen',
+      'resultsScreen':'homeScreen',
+      'wordEditorScreen':'manageScreen',
+    };
+    const dest = backMap[currentId];
+    if(dest){
+      showScreen(dest);
+    }
+    // Always push new state to keep stack alive
+    history.pushState({screen: dest || currentId}, '');
+  });
 }
 
 // ===================== PLAYERS =====================
@@ -1527,13 +1626,6 @@ function showToast(msg){
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2500);
-}
-
-// ===================== SERVICE WORKER =====================
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
-  });
 }
 
 // ===================== START =====================
