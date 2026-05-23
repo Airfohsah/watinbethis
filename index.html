@@ -890,16 +890,16 @@ function showScreen(id){
 function checkMotionPermission(){
   if(typeof DeviceOrientationEvent === 'undefined'){
     tiltEnabled = false;
+    showScreen('homeScreen');
     return;
   }
   if(typeof DeviceOrientationEvent.requestPermission === 'function'){
-    // iOS 13+
-    // show perm screen
+    // iOS 13+ — needs explicit permission
     showScreen('permScreen');
   } else {
-    // Android or desktop
+    // Android / desktop — just attach listener directly
     tiltEnabled = true;
-    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('deviceorientation', handleOrientation, true);
     showScreen('homeScreen');
   }
 }
@@ -908,7 +908,7 @@ function requestMotion(){
   DeviceOrientationEvent.requestPermission().then(state=>{
     if(state === 'granted'){
       tiltEnabled = true;
-      window.addEventListener('deviceorientation', handleOrientation);
+      window.addEventListener('deviceorientation', handleOrientation, true);
     }
     showScreen('homeScreen');
   }).catch(()=>{
@@ -921,32 +921,27 @@ function skipMotion(){
   showScreen('homeScreen');
 }
 
+let tiltCooldown = false;
+
 function handleOrientation(e){
-  if(!document.getElementById('gameScreen').classList.contains('hidden')){
-    const beta = e.beta || 0; // front-back tilt
-    // beta ~90 = phone upright (normal hold), ~0 = screen facing up (flat), ~180/-180 = screen facing down
-    // Tilt FORWARD (got it): beta rises above ~130 (screen tilting face-down / forward)
-    // Tilt BACKWARD (skip): beta drops below ~45 (screen tilting back / away from you)
+  if(document.getElementById('gameScreen').classList.contains('hidden')) return;
+  if(tiltCooldown) return;
 
-    // Show tilt bar: how far toward the "got it" tilt
-    const pct = Math.min(100, Math.max(0, (beta - 90) * 3));
-    document.getElementById('tiltBar').style.width = pct + '%';
+  const gamma = e.gamma || 0; // left-right tilt: negative = left, positive = right
 
-    if(beta > 130){
-      // Tilted forward — GOT IT
-      if(!tiltTriggered){
-        tiltTriggered = true;
-        markGot();
-      }
-    } else if(beta < 45){
-      // Tilted backward — SKIP
-      if(!tiltTriggered){
-        tiltTriggered = true;
-        markSkip();
-      }
-    } else {
-      tiltTriggered = false;
-    }
+  // In landscape holding phone up facing crowd:
+  // Tilt LEFT (gamma < -40) = GOT IT
+  // Tilt RIGHT (gamma > 40) = SKIP
+  // Needs a big deliberate tilt — threshold is 40 degrees
+
+  if(gamma < -40){
+    tiltCooldown = true;
+    markGot();
+    setTimeout(()=>{ tiltCooldown = false; }, 1200);
+  } else if(gamma > 40){
+    tiltCooldown = true;
+    markSkip();
+    setTimeout(()=>{ tiltCooldown = false; }, 1200);
   }
 }
 
